@@ -1,135 +1,111 @@
-/********************************************************************************
-Copyright (c) 2015, TRACLabs, Inc.
-All rights reserved.
+// Copyright (c) 2015, TRACLabs, Inc.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+//    * Redistributions of source code must retain the above copyright
+//      notice, this list of conditions and the following disclaimer.
+//
+//    * Redistributions in binary form must reproduce the above copyright
+//      notice, this list of conditions and the following disclaimer in the
+//      documentation and/or other materials provided with the distribution.
+//
+//    * Neither the name of the {copyright_holder} nor the names of its
+//      contributors may be used to endorse or promote products derived from
+//      this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
 
-Redistribution and use in source and binary forms, with or without modification,
- are permitted provided that the following conditions are met:
 
-    1. Redistributions of source code must retain the above copyright notice,
-       this list of conditions and the following disclaimer.
+#ifndef TRAC_IK__KDL_TL_HPP_
+#define TRAC_IK__KDL_TL_HPP_
 
-    2. Redistributions in binary form must reproduce the above copyright notice,
-       this list of conditions and the following disclaimer in the documentation
-       and/or other materials provided with the distribution.
+#include <chrono>
+#include <vector>
 
-    3. Neither the name of the copyright holder nor the names of its contributors
-       may be used to endorse or promote products derived from this software
-       without specific prior written permission.
+#include "kdl/chainfksolverpos_recursive.hpp"
+#include "kdl/chainiksolvervel_pinv.hpp"
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
-INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
-OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
-OF THE POSSIBILITY OF SUCH DAMAGE.
-********************************************************************************/
+namespace TRAC_IK
+{
+class TRAC_IK;
+}
 
-#ifndef KDLCHAINIKSOLVERPOS_TL_HPP
-#define KDLCHAINIKSOLVERPOS_TL_HPP
+namespace KDL
+{
 
-// standard includes
-#include <random>
+enum BasicJointType { RotJoint, TransJoint, Continuous };
 
-// system includes
-#include <kdl/chainfksolverpos_recursive.hpp>
-#include <kdl/chainiksolvervel_pinv.hpp>
-
-namespace KDL {
-
-enum BasicJointType {
-    RotJoint, TransJoint, Continuous
-};
-
-/// An inverse kinematics algorithm that computes an inverse kinematics solution
-/// via repeated application.
 class ChainIkSolverPos_TL
 {
+  friend class TRAC_IK::TRAC_IK;
+
 public:
+  ChainIkSolverPos_TL(
+    const Chain & chain, const JntArray & q_min, const JntArray & q_max,
+    double maxtime = 0.005, double eps = 1e-3, bool random_restart = false,
+    bool try_jl_wrap = false);
 
-    ChainIkSolverPos_TL(
-        const Chain& chain,
-        const JntArray& q_min,
-        const JntArray& q_max,
-        double eps = 1e-3,
-        bool random_restart = false,
-        bool try_jl_wrap = false);
+  ~ChainIkSolverPos_TL();
 
-    /// \name Configuration
-    ///@{
-    void setBounds(const KDL::Twist& bounds) { bounds_ = bounds; }
-    auto bounds() const -> const KDL::Twist& { return bounds_; }
+  int CartToJnt(
+    const KDL::JntArray & q_init, const KDL::Frame & p_in, KDL::JntArray & q_out,
+    const KDL::Twist bounds = KDL::Twist::Zero());
 
-    void setEps(double eps) { eps_ = eps; }
-    double eps() const { return eps_; }
-    ///@}
-
-    /// \name Iterative Cart-to-Joint Interface
-    ///@{
-
-    /// Reset the current position and target frame of the solver.
-    void restart(const KDL::JntArray& q_init, const KDL::Frame& p_in);
-
-    /// Reset the current position, but NOT the target frame, of the solver.
-    void restart(const KDL::JntArray& q_init);
-
-    /// Step through a single iteration of the solver.
-    ///
-    /// Returns 0 if the solver has already converged to a solution and a
-    /// non-zero value otherwise.
-    int step(int steps = 1);
-
-    ///@}
-
-    /// Return the current configuration in the solver; the solution
-    /// configuration if the solver has converged to a solution.
-    const KDL::JntArray& qout() const { return *q_curr_; }
-
-    int CartToJnt(
-        const KDL::JntArray& q_init,
-        const KDL::Frame& p_in,
-        KDL::JntArray& q_out,
-        const KDL::Twist& bounds = KDL::Twist::Zero());
+  inline void setMaxtime(double t)
+  {
+    maxtime = std::chrono::duration<double>(t);
+  }
 
 private:
+  const Chain chain;
+  JntArray q_min;
+  JntArray q_max;
 
-    const Chain chain_;
-    JntArray joint_min_;
-    JntArray joint_max_;
-    std::vector<KDL::BasicJointType> joint_types_;
+  KDL::Twist bounds;
 
-    std::default_random_engine rng_;
+  KDL::ChainIkSolverVel_pinv vik_solver;
+  KDL::ChainFkSolverPos_recursive fksolver;
+  JntArray delta_q;
+  std::chrono::duration<double> maxtime;
 
-    KDL::ChainIkSolverVel_pinv vik_solver_;
-    KDL::ChainFkSolverPos_recursive fk_solver_;
+  double eps;
 
-    // step configuration
-    KDL::Twist bounds_;
-    double eps_;
-    bool rr_;
-    bool wrap_;
+  bool rr;
+  bool wrap;
 
-    // double-buffering for storing curr and next positions
-    KDL::JntArray q_buff1_;
-    KDL::JntArray q_buff2_;
+  std::vector<KDL::BasicJointType> types;
 
-    // current joint positions
-    KDL::JntArray *q_curr_;
+  inline void abort()
+  {
+    aborted = true;
+  }
 
-    // next joint positions
-    KDL::JntArray *q_next_;
+  inline void reset()
+  {
+    aborted = false;
+  }
 
-    bool done_;
+  bool aborted;
 
-    KDL::Frame f_curr_;
-    KDL::JntArray delta_q_;
+  Frame f;
+  Twist delta_twist;
 
-    KDL::Frame f_target_;
-
-    void randomize(KDL::JntArray& q);
+  inline static double fRand(double min, double max)
+  {
+    double f = static_cast<double>(rand()) / RAND_MAX;  // NOLINT
+    return min + f * (max - min);
+  }
 };
 
 /**
@@ -143,16 +119,13 @@ private:
  * \warning In contrast to standard KDL diff methods, the result of
  * diffRelative is w.r.t. frame b1 instead of frame a.
  */
-IMETHOD Twist diffRelative(
-    const Frame & F_a_b1,
-    const Frame & F_a_b2,
-    double dt = 1)
+IMETHOD Twist diffRelative(const Frame & F_a_b1, const Frame & F_a_b2, double dt = 1)
 {
-    return Twist(
-            F_a_b1.M.Inverse() * diff(F_a_b1.p, F_a_b2.p, dt),
-            F_a_b1.M.Inverse() * diff(F_a_b1.M, F_a_b2.M, dt));
+  return Twist(
+    F_a_b1.M.Inverse() * diff(F_a_b1.p, F_a_b2.p, dt),
+    F_a_b1.M.Inverse() * diff(F_a_b1.M, F_a_b2.M, dt));
 }
 
-} // namespace KDL
+}  // namespace KDL
 
-#endif
+#endif  // TRAC_IK__KDL_TL_HPP_
